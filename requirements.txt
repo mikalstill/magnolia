@@ -1,4 +1,10 @@
-click>=8.0.0        # bsd
-tox                 # mit
-flake8              # mit
-testtools           # mit
+shakenfist-utilities        # apache2
+flask                       # bsd
+flask_restful               # bsd
+flask-jwt-extended          # mit
+flask-request-id-middleware # mit
+bcrypt                      # apache2
+gunicorn                    # mit
+oslo.concurrency            # apache2
+setproctitle                # bsd
+pydantic                    # mit

@@ -1,69 +1,29 @@
-# Copyright 2022 Michael Still
+import multiprocessing
+from oslo_concurrency import processutils
+import os
+from shakenfist_utilities import logs
 
-import click
-import datetime
-import logging
-
-
-from magnolia.commandline import daemon
+from .config import config
 
 
-class LogFormatter(logging.Formatter):
-    def format(self, record):
-        level_to_color = {
-            logging.DEBUG: 'blue',
-            logging.INFO: None,
-            logging.WARNING: 'yellow',
-            logging.ERROR: 'red'
-        }
-
-        timestamp = str(datetime.datetime.now())
-        if not record.exc_info:
-            colour = level_to_color.get(record.levelno)
-            msg = record.getMessage()
-            if colour:
-                return '%s %s: %s' % (timestamp,
-                                      click.style(logging._levelToName[record.levelno],
-                                                  level_to_color[record.levelno]),
-                                      msg)
-            return '%s %s' % (timestamp, msg)
-        return logging.Formatter.format(self, record)
+LOG, _ = logs.setup('magnolia')
 
 
-class LoggingHandler(logging.Handler):
-    level = logging.INFO
+def main():
+    LOG.info('Starting')
 
-    def emit(self, record):
-        try:
-            # NOTE(mikal): level looks unused, but is used by the python
-            # logging handler
-            self.level = logging._nameToLevel[record.levelname.upper()]
-            click.echo(self.format(record), err=True)
-        except Exception:
-            self.handleError(record)
+    worker_count = multiprocessing.cpu_count() * 2 + 1
+    os.makedirs(config.PID_FILE_DIR, exist_ok=True)
+    os.makedirs(config.QUEUE_DIR, exist_ok=True)
 
-
-LOG = logging.getLogger(__name__)
-handler = LoggingHandler()
-handler.formatter = LogFormatter()
-LOG.handlers = [handler]
-
-
-@click.group()
-@click.option('--verbose/--no-verbose', default=False)
-@click.pass_context
-def cli(ctx, verbose):
-    if not ctx.obj:
-        ctx.obj = {}
-    ctx.obj['LOGGER'] = LOG
-
-    if verbose:
-        ctx.obj['VERBOSE'] = True
-        LOG.setLevel(logging.DEBUG)
-        LOG.debug('Set log level to DEBUG')
-    else:
-        ctx.obj['VERBOSE'] = False
-        LOG.setLevel(logging.INFO)
-
-
-cli.add_command(daemon.daemon)
+    cmd = config.API_COMMAND_LINE % {
+        'port': config.API_PORT,
+        'timeout': config.API_TIMEOUT,
+        'name': 'magnolia',
+        'pid_file_dir': config.PID_FILE_DIR,
+        'queue_dir': config.QUEUE_DIR,
+        'workers': worker_count
+    }
+    LOG.info('Executing %s' % cmd)
+    processutils.execute(cmd, check_exit_code=[0, 1, -15], shell=True)
+    LOG.info('gunicorn ended')
